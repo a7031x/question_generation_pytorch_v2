@@ -29,7 +29,7 @@ class SoftDotAttention(nn.Module):
         dense_ctx = torch.einsum('bsd,dc->bsc',(context, self.linear_ctx.weight.transpose(0,1)))
         attn = torch.einsum('bsd,bd->bs', (dense_ctx, input))
         attn -= (1-ctx_mask) * 100000
-        attn = self.sm(attn).clone()#[batch, sourceL]
+        attn = self.sm(attn)#[batch, sourceL]
 
         weighted_context = torch.einsum('bs,bsd->bd',(attn, dense_ctx))#[batch, dim]
 

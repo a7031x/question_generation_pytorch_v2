@@ -62,7 +62,7 @@ def train(auto_stop, steps=50, threshold=0.2):
         feeder.load_state(ckpt['feeder'])
     while True:
         #run_generator_epoch(generator, discriminator, generator_feeder, criterion, generator_optimizer, 0.2, 100)
-        loss = run_epoch(model, feeder, optimizer, steps)
+        run_epoch(model, feeder, optimizer, steps)
         utils.mkdir(config.checkpoint_folder)
         torch.save({
             'model':  model.state_dict(),

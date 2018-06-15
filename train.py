@@ -42,6 +42,7 @@ def run_epoch(model, feeder, optimizer, batches):
         logit = model(x, y)
         sm_logit = sm(logit).transpose(1,3).transpose(2,3)
         mask = (tensor(qids)!=config.NULL_ID).float()
+        #mask[:,:,0] = 0.2
         loss = (criterion(sm_logit, y) * mask).sum() / mask.sum()
         optimizer.zero_grad()
         loss.backward()

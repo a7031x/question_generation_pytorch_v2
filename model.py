@@ -28,12 +28,15 @@ class Model(decoder.Ctx2SeqAttention):
 
     def forward(self, x, y):
         ctx, state_x, ctx_mask = self.encode_passage(x)
-        batch_size = y.shape[0]
-        num_questions = y.shape[1]
-        sos = torch.LongTensor(batch_size, num_questions, 1).fill_(config.SOS_ID).cuda()
-        y = torch.cat([sos, y], 2)
-        question_embed = self.embedding(y)
-        decoder_logit = super(Model, self).forward(ctx, state_x, ctx_mask, question_embed)
+        if y is not None:
+            batch_size = y.shape[0]
+            num_questions = y.shape[1]
+            sos = torch.LongTensor(batch_size, num_questions, 1).fill_(config.SOS_ID).cuda()
+            y = torch.cat([sos, y], 2)
+            question_embed = self.embedding(y)
+            decoder_logit = super(Model, self).forward(ctx, state_x, ctx_mask, question_embed)
+        else:
+            decoder_logit = super(Model, self).decode(ctx, state_x, ctx_mask)
         return decoder_logit
 
 

@@ -77,6 +77,7 @@ class LSTMAttentionDot(nn.Module):
 
         output = []
         if isinstance(steps_or_target, int):
+            steps = steps_or_target
             for _ in range(steps):
                 hidden = recurrence(None, hidden)
                 output.append(hidden[0] if isinstance(hidden, tuple) else hidden)

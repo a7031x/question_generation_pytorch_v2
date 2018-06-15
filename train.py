@@ -46,6 +46,11 @@ def run_epoch(model, feeder, optimizer, batches):
         optimizer.step()
         print('------ITERATION {}, {}/{}, loss: {:>.4F}'.format(
             feeder.iteration, feeder.cursor, feeder.size, loss.tolist()))
+        if nbatch % 20 == 0:
+            logit = model(x, None)
+            gids = logit.argmax(-1)
+            question = feeder.ids_to_sent(gids[0])
+            print('generation test: {}'.format(question))
     return loss
 
 

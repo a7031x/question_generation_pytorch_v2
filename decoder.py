@@ -141,7 +141,7 @@ class Ctx2SeqAttention(nn.Module):
 
     def decode(self, ctx, state, ctx_mask, target=None):
         h_t, c_t = state.chunk(2, -1)
-        decoder_init_state = nn.Tanh()(self.encoder2decoder(h_t))
+        decoder_init_state = self.encoder2decoder(h_t).tanh()
 
         trg_h, _ = self.decoder(
             target if target is not None else self.num_steps,

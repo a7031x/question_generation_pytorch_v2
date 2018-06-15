@@ -14,7 +14,7 @@ class SoftDotAttention(nn.Module):
         self.linear_in = nn.Linear(dim, ctx_dim, bias=False)
         self.sm = nn.Softmax(dim=-1)
         self.linear_out = nn.Linear(ctx_dim*2, dim, bias=False)
-        self.linear_ctx = nn.Linear(ctx_dim*2, ctx_dim, bias=False)
+        self.linear_ctx = nn.parameter.Parameter(torch.Tensor(ctx_dim*2, ctx_dim))
         self.tanh = nn.Tanh()
 
 
@@ -26,10 +26,10 @@ class SoftDotAttention(nn.Module):
         """
         # Get attention
         input = self.linear_in(input)
-        dense_ctx = torch.einsum('bsd,dc->bsc',(context, self.linear_ctx.weight.transpose(0,1)))
+        dense_ctx = torch.einsum('bsd,dc->bsc',(context, self.linear_ctx.clone()))
         attn = torch.einsum('bsd,bd->bs', (dense_ctx, input))
         attn -= (1-ctx_mask) * 100000
-        attn = self.sm(attn)#[batch, sourceL]
+        attn = self.sm(attn).clone()#[batch, sourceL]
 
         weighted_context = torch.einsum('bs,bsd->bd',(attn, dense_ctx))#[batch, dim]
 
@@ -64,14 +64,14 @@ class LSTMAttentionDot(nn.Module):
                 gates += self.input_weights(input)
             ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
 
-            ingate = F.sigmoid(ingate)
-            forgetgate = F.sigmoid(forgetgate)
-            cellgate = F.tanh(cellgate)
-            outgate = F.sigmoid(outgate)
+            ingate = ingate.sigmoid()
+            forgetgate = forgetgate.sigmoid()
+            cellgate = cellgate.tanh()
+            outgate = outgate.sigmoid()
 
             cy = (forgetgate * cx) + (ingate * cellgate)
             hy = outgate * F.tanh(cy)  # n_b x hidden_dim
-            h_tilde, _ = self.attention_layer(hy, ctx, ctx_mask)
+            h_tilde, _ = self.attention_layer(hy, ctx.clone(), ctx_mask)
 
             return h_tilde, cy
 

@@ -45,7 +45,7 @@ def run_epoch(model, feeder, optimizer, batches):
         loss.backward()
         optimizer.step()
         print('------ITERATION {}, {}/{}, loss: {:>.4F}'.format(
-            feeder.iteration, feeder.cursor, feeder.size, loss.logit()))
+            feeder.iteration, feeder.cursor, feeder.size, loss.tolist()))
     return loss
 
 

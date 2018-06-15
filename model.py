@@ -2,17 +2,16 @@ import torch
 import torch.nn as nn
 import numpy as np
 import config
-import seq2seq.rnn as rnn
-#import decoder
+import decoder
 
-
-class Model(rnn.Seq2SeqAttentionSharedEmbedding):
+class Model(decoder.Ctx2SeqAttention):
     def __init__(self, vocab_size):
-        super(rnn.Seq2SeqAttentionSharedEmbedding, self).__init__(
-            emb_dim = config.embedding_dim,
+        super(Model, self).__init__(
+            ctx_dim = config.encoder_hidden_dim*2,
+            num_steps = config.max_question_len,
             vocab_size = vocab_size,
-            src_hidden_dim = config.encoder_hidden_dim,
-            trg_hidden_dim = config.decoder_hidden_dim,
+            src_hidden_dim = config.dense_vector_dim,
+            trg_hidden_dim = config.dense_vector_dim,
             pad_token = config.NULL_ID,
             bidirectional = True,
             nlayers = config.num_question_encoder_layers,
@@ -30,17 +29,11 @@ class Model(rnn.Seq2SeqAttentionSharedEmbedding):
         ctx, state_x, ctx_mask = self.encode_passage(x)
         batch_size = y.shape[0]
         num_questions = y.shape[1]
-        y = y.view(batch_size*num_questions, -1)
-        decoder_logit = super(rnn.Seq2SeqAttentionSharedEmbedding, self).forward(ctx, y, )
-
-        mask = y != 0
-        length = torch.sum(mask, -1)
-        mask = length != 0
-        state_y = self.encode_question(y)
-        tiled_state_x = state_x.repeat(1, num_questions).view(batch_size*num_questions, -1)
-        similarity = torch.sum(tiled_state_x * state_y, -1) * mask.float()
-        similarity = similarity.view(batch_size, num_questions)
-        return similarity, torch.sum(mask), ctx, state_x, ctx_mask
+        sos = torch.Tensor(batch_size, num_questions, 1).fill_(config.SOS_ID)
+        y = torch.cat([sos, y], 2)
+        question_embed = self.embedding(y)
+        decoder_logit = super(Model, self).forward(ctx, state_x, ctx_mask, question_embed)
+        return decoder_logit
 
 
     def encode_passage(self, input):
@@ -90,33 +83,9 @@ class Model(rnn.Seq2SeqAttentionSharedEmbedding):
         return dense0, dense1
 
 
-class Generator(decoder.Ctx2SeqAttention):
-    def __init__(self, vocab_size):
-        super(Generator, self).__init__(
-            ctx_dim=config.encoder_hidden_dim*2,
-            num_steps=config.max_question_len,
-            vocab_size=vocab_size,
-            src_hidden_dim=config.dense_vector_dim,
-            trg_hidden_dim=config.dense_vector_dim,
-            attention_mode='dot',
-            batch_size=config.batch_size,
-            bidirectional=True,
-            pad_token_src=config.NULL_ID,
-            pad_token_trg=config.NULL_ID,
-            nlayers=config.num_passage_encoder_layers,
-            nlayers_trg=config.num_decoder_rnn_layers,
-            dropout=1-config.keep_prob
-        )
-
-
-    def forward(self, ctx, state, ctx_mask):
-        decoder_logit = nn.functional.softmax(super(Generator, self).forward(ctx, state, ctx_mask), -1).clone()
-        return decoder_logit
-
-
 if __name__ == '__main__':
     criterion = nn.BCEWithLogitsLoss()
-    model = Discriminator(config.char_vocab_size, None)
+    model = Model(config.char_vocab_size, None)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     seq = torch.LongTensor([[1,2,3,4,5], [4,5,6,7,8]])
     target = torch.Tensor([0, 1])

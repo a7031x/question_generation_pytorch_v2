@@ -53,12 +53,14 @@ class LSTMAttentionDot(nn.Module):
 
         self.attention_layer = SoftDotAttention(hidden_size, input_size)
 
-    def forward(self, steps, hidden, ctx, ctx_mask):
+    def forward(self, steps_or_target, hidden, ctx, ctx_mask):
         """Propogate input through the network."""
-        def recurrence(hidden):
+        def recurrence(input, hidden):
             """Recurrence helper."""
             hx, cx = hidden  # n_b x hidden_dim
             gates = self.hidden_weights(hx)
+            if input is not None:
+                gates += self.input_weights(input)
             ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
 
             ingate = F.sigmoid(ingate)
@@ -73,11 +75,22 @@ class LSTMAttentionDot(nn.Module):
             return h_tilde, cy
 
         output = []
-        for _ in range(steps):
-            hidden = recurrence(hidden)
-            output.append(hidden[0] if isinstance(hidden, tuple) else hidden)
+        if isinstance(steps_or_target, int):
+            for _ in range(steps):
+                hidden = recurrence(None, hidden)
+                output.append(hidden[0] if isinstance(hidden, tuple) else hidden)
+            output = torch.cat(output, 0).view(steps, *output[0].size())
+        else:
+            if self.batch_first:
+                target = steps_or_target.transpose(0, 1)
+            else:
+                target = steps_or_target
+            output = []
+            for i in range(target.shape[0]):
+                hidden = recurrence(target[i], hidden)
+                output.append(isinstance(hidden, tuple) and hidden[0] or hidden)
 
-        output = torch.cat(output, 0).view(steps, *output[0].size())
+            output = torch.cat(output, 0).view(target.size(0), *output[0].size())
 
         if self.batch_first:
             output = output.transpose(0, 1)
@@ -94,10 +107,7 @@ class Ctx2SeqAttention(nn.Module):
         vocab_size,
         src_hidden_dim,
         trg_hidden_dim,
-        attention_mode,
-        batch_size,
-        pad_token_src,
-        pad_token_trg,
+        pad_token,
         bidirectional=True,
         nlayers=2,
         nlayers_trg=2,
@@ -109,14 +119,11 @@ class Ctx2SeqAttention(nn.Module):
         self.vocab_size = vocab_size
         self.src_hidden_dim = src_hidden_dim
         self.trg_hidden_dim = trg_hidden_dim
-        self.attention_mode = attention_mode
-        self.batch_size = batch_size
         self.bidirectional = bidirectional
         self.nlayers = nlayers
         self.dropout = dropout
         self.num_directions = 2 if bidirectional else 1
-        self.pad_token_src = pad_token_src
-        self.pad_token_trg = pad_token_trg
+        self.pad_token = pad_token
 
         self.src_hidden_dim = src_hidden_dim//2 if self.bidirectional else src_hidden_dim
         self.decoder = LSTMAttentionDot(ctx_dim, trg_hidden_dim, batch_first=True)
@@ -131,12 +138,12 @@ class Ctx2SeqAttention(nn.Module):
         self.decoder2vocab.bias.data.fill_(0)
 
 
-    def forward(self, ctx, state, ctx_mask):
+    def decode(self, ctx, state, ctx_mask, target=None):
         h_t, c_t = state.chunk(2, -1)
         decoder_init_state = nn.Tanh()(self.encoder2decoder(h_t))
 
-        trg_h, (_, _) = self.decoder(
-            self.num_steps,
+        trg_h, _ = self.decoder(
+            target or self.num_steps,
             (decoder_init_state, c_t),
             ctx,
             ctx_mask
@@ -149,13 +156,21 @@ class Ctx2SeqAttention(nn.Module):
 
         decoder_logit = self.decoder2vocab(trg_h_reshape)
         decoder_logit = decoder_logit.view(
-            trg_h.size()[0],
-            trg_h.size()[1],
+            trg_h.shape[0],
+            trg_h.shape[1],
             decoder_logit.size()[1]
         )
         return decoder_logit
 
 
+    def forward(self, ctx, state, ctx_mask, questions):
+        logits = []
+        for y in torch.unbind(questions, 1):
+            decoder_logit = self.decode(ctx, state, ctx_mask, y)
+            logits.append(decoder_logit)
+        return torch.cat(logits, 1)
+
+    '''
     def decode(self, logits):
         """Return probability distribution over words."""
         logits_reshape = logits.view(-1, self.vocab_size)
@@ -164,3 +179,4 @@ class Ctx2SeqAttention(nn.Module):
             logits.size()[0], logits.size()[1], logits.size()[2]
         )
         return word_probs
+    '''

@@ -991,6 +991,7 @@ class Seq2SeqAttentionSharedEmbedding(nn.Module):
         )
         return decoder_logit
 
+
     def decode(self, logits):
         """Return probability distribution over words."""
         logits_reshape = logits.view(-1, self.vocab_size)

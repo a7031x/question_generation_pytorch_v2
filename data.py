@@ -94,8 +94,7 @@ class TrainFeeder(Feeder):
     def create_record(self, example):
         passage, questions = example
         truth = questions
-        false = self.create_false_questions(questions)
-        record = passage, truth + false, [1] * len(truth) + [0] * len(false)
+        record = passage, truth, [1] * len(truth)
         return record
 
 
@@ -178,8 +177,6 @@ class TrainFeeder(Feeder):
             passage, questions = ''.join(passage), [''.join(q) for q in questions]
             pids = self.sent_to_ids(passage)
             qids = [self.sent_to_ids(question) for question in questions]
-            #question_vector = self.label_vector(questions[0])
-            #passage_tag = [self.seq_tag(q, p) for p,q in zip()]
             batch_pid.append(pids)
             batch_qid.append(qids)
             batch_label.append(labels)

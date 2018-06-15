@@ -7,29 +7,30 @@ import decoder
 class Model(decoder.Ctx2SeqAttention):
     def __init__(self, vocab_size):
         super(Model, self).__init__(
-            ctx_dim = config.encoder_hidden_dim*2,
+            ctx_dim = config.encoder_hidden_dim,
             num_steps = config.max_question_len,
             vocab_size = vocab_size,
             src_hidden_dim = config.dense_vector_dim,
-            trg_hidden_dim = config.dense_vector_dim,
+            trg_hidden_dim = config.dense_vector_dim//2,
             pad_token = config.NULL_ID,
             bidirectional = True,
             nlayers = config.num_question_encoder_layers,
             nlayers_trg = config.num_decoder_rnn_layers,
             dropout=0)
-
+        self.embedding = torch.nn.Embedding(self.vocab_size, config.embedding_dim)
         self.passage_conv0 = self.cnn_layers(config.num_passage_encoder_layers, config.encoder_kernel_size0, config.conv_vector_dim)
         self.passage_conv1 = self.cnn_layers(config.num_passage_encoder_layers, config.encoder_kernel_size1, config.conv_vector_dim)
         self.encoder_dim = config.encoder_hidden_dim * 2
         self.passage_dense = nn.Linear(self.encoder_dim, config.dense_match_dim)
         self.passage_encoder = nn.LSTM(config.conv_vector_dim*2, config.encoder_hidden_dim, 2, bidirectional=True, batch_first=True)
+        self.state_dense = nn.Linear(config.dense_vector_dim*4, config.dense_vector_dim)
 
 
     def forward(self, x, y):
         ctx, state_x, ctx_mask = self.encode_passage(x)
         batch_size = y.shape[0]
         num_questions = y.shape[1]
-        sos = torch.Tensor(batch_size, num_questions, 1).fill_(config.SOS_ID)
+        sos = torch.LongTensor(batch_size, num_questions, 1).fill_(config.SOS_ID).cuda()
         y = torch.cat([sos, y], 2)
         question_embed = self.embedding(y)
         decoder_logit = super(Model, self).forward(ctx, state_x, ctx_mask, question_embed)
@@ -50,6 +51,7 @@ class Model(decoder.Ctx2SeqAttention):
         context = torch.bmm(alpha, encoding)
         ctx, (state_h, state_c) = self.passage_encoder(context)
         state = torch.cat([state_h.transpose(0, 1), state_c.transpose(0, 1)], -1).view(embed.shape[0], -1)
+        state = self.state_dense(state)
         return ctx, state, mask
         
 

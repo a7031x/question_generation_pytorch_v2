@@ -8,6 +8,10 @@ import utils
 
 ckpt_path = os.path.join(config.checkpoint_folder, 'model.ckpt')
 
+def tensor(v):
+    return torch.tensor(v).cuda()
+
+
 def print_prediction(feeder, similarity, pids, qids, labels, number=None):
     if number is None:
         number = len(pids)
@@ -25,15 +29,18 @@ def print_prediction(feeder, similarity, pids, qids, labels, number=None):
             print(' {} {:>.4F}: {}'.format(lab, sim, question))
 
 
-def run_epoch(model, feeder, criterion, optimizer, batches):
-    nbatch = 0 
+def run_epoch(model, feeder, optimizer, batches):
+    nbatch = 0
+    criterion = torch.nn.NLLLoss(size_average=False)
+    sm = torch.nn.LogSoftmax(dim=-1)
     while nbatch < batches:
         pids, qids, labels, _ = feeder.next()
         nbatch += 1
-        x = torch.tensor(pids).cuda()
-        y = torch.tensor(qids).cuda()
+        x = tensor(pids)
+        y = tensor(qids)
         logit = model(x, y)
-        loss = criterion(logit, y) / np.sum(labels)
+        sm_logit = sm(logit).transpose(1,3).transpose(2,3)
+        loss = criterion(sm_logit, y) / tensor(labels).sum().float()
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -46,7 +53,6 @@ def train(auto_stop, steps=50, threshold=0.2):
     dataset = Dataset()
     feeder = TrainFeeder(dataset)
     model = Model(len(dataset.ci2n)).cuda()
-    criterion = torch.nn.BCEWithLogitsLoss(size_average=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     feeder.prepare('train')
     if os.path.isfile(ckpt_path):
@@ -54,10 +60,9 @@ def train(auto_stop, steps=50, threshold=0.2):
         model.load_state_dict(ckpt['model'])
         optimizer.load_state_dict(ckpt['optimizer'])
         feeder.load_state(ckpt['feeder'])
-    loss = 1
     while True:
         #run_generator_epoch(generator, discriminator, generator_feeder, criterion, generator_optimizer, 0.2, 100)
-        loss = run_epoch(model, feeder, criterion, optimizer, steps)
+        loss = run_epoch(model, feeder, optimizer, steps)
         utils.mkdir(config.checkpoint_folder)
         torch.save({
             'model':  model.state_dict(),

@@ -14,6 +14,7 @@ class SoftDotAttention(nn.Module):
         self.linear_in = nn.Linear(dim, ctx_dim, bias=False)
         self.sm = nn.Softmax(dim=-1)
         self.linear_out = nn.Linear(ctx_dim*2, dim, bias=False)
+        self.linear_ctx = nn.Linear(ctx_dim*2, ctx_dim, bias=False)
         self.tanh = nn.Tanh()
 
 
@@ -25,13 +26,14 @@ class SoftDotAttention(nn.Module):
         """
         # Get attention
         input = self.linear_in(input)
-        attn = torch.einsum('bsd,bd->bs', (context, input))
+        dense_ctx = torch.einsum('bsd,dc->bsc',(context, self.linear_ctx.weight.transpose(0,1)))
+        attn = torch.einsum('bsd,bd->bs', (dense_ctx, input))
         attn -= (1-ctx_mask) * 100000
         attn = self.sm(attn).clone()#[batch, sourceL]
 
-        weighted_context = torch.einsum('bs,bsd->bd',(attn, context))#[batch, dim]
+        weighted_context = torch.einsum('bs,bsd->bd',(attn, dense_ctx))#[batch, dim]
 
-        h_tilde = torch.cat((weighted_context, input), 1)#[batch, dim*2]
+        h_tilde = torch.cat((weighted_context, input), 1)#[batch, ctx_dim*2]
         h_tilde = self.tanh(self.linear_out(h_tilde))#[batch, dim]
 
         return h_tilde, attn
@@ -50,7 +52,6 @@ class LSTMAttentionDot(nn.Module):
 
         self.input_weights = nn.Linear(input_size, 4 * hidden_size)
         self.hidden_weights = nn.Linear(hidden_size, 4 * hidden_size)
-
         self.attention_layer = SoftDotAttention(hidden_size, input_size)
 
     def forward(self, steps_or_target, hidden, ctx, ctx_mask):
@@ -88,7 +89,7 @@ class LSTMAttentionDot(nn.Module):
             output = []
             for i in range(target.shape[0]):
                 hidden = recurrence(target[i], hidden)
-                output.append(isinstance(hidden, tuple) and hidden[0] or hidden)
+                output.append(hidden[0] if isinstance(hidden, tuple) else hidden)
 
             output = torch.cat(output, 0).view(target.size(0), *output[0].size())
 
@@ -128,7 +129,7 @@ class Ctx2SeqAttention(nn.Module):
         self.src_hidden_dim = src_hidden_dim//2 if self.bidirectional else src_hidden_dim
         self.decoder = LSTMAttentionDot(ctx_dim, trg_hidden_dim, batch_first=True)
 
-        self.encoder2decoder = nn.Linear(self.src_hidden_dim * self.num_directions, trg_hidden_dim)
+        self.encoder2decoder = nn.Linear(self.src_hidden_dim, trg_hidden_dim)
         self.decoder2vocab = nn.Linear(trg_hidden_dim, vocab_size)
         self.init_weights()
 
@@ -143,7 +144,7 @@ class Ctx2SeqAttention(nn.Module):
         decoder_init_state = nn.Tanh()(self.encoder2decoder(h_t))
 
         trg_h, _ = self.decoder(
-            target or self.num_steps,
+            target if target is not None else self.num_steps,
             (decoder_init_state, c_t),
             ctx,
             ctx_mask
@@ -160,7 +161,7 @@ class Ctx2SeqAttention(nn.Module):
             trg_h.shape[1],
             decoder_logit.size()[1]
         )
-        return decoder_logit
+        return decoder_logit[:,:decoder_logit.shape[1]-1,:]
 
 
     def forward(self, ctx, state, ctx_mask, questions):
@@ -168,7 +169,8 @@ class Ctx2SeqAttention(nn.Module):
         for y in torch.unbind(questions, 1):
             decoder_logit = self.decode(ctx, state, ctx_mask, y)
             logits.append(decoder_logit)
-        return torch.cat(logits, 1)
+        output = torch.cat(logits, 1).view(questions.shape[0], questions.shape[1], questions.shape[2]-1, -1)
+        return output
 
     '''
     def decode(self, logits):

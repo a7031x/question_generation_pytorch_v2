@@ -65,7 +65,7 @@ def train(auto_stop, steps=50, threshold=0.2):
     dataset = Dataset()
     feeder = TrainFeeder(dataset)
     model = Model(len(dataset.ci2n)).cuda()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     feeder.prepare('train')
     if os.path.isfile(ckpt_path):
         ckpt = torch.load(ckpt_path)

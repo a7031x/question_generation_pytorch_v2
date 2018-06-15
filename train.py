@@ -31,26 +31,27 @@ def print_prediction(feeder, similarity, pids, qids, labels, number=None):
 
 def run_epoch(model, feeder, optimizer, batches):
     nbatch = 0
-    criterion = torch.nn.NLLLoss(size_average=False)
+    criterion = torch.nn.NLLLoss(size_average=False, reduce=False)
     sm = torch.nn.LogSoftmax(dim=-1)
     while nbatch < batches:
-        pids, qids, labels, _ = feeder.next()
+        pids, qids, _,  _ = feeder.next()
         nbatch += 1
         x = tensor(pids)
         y = tensor(qids)
         logit = model(x, y)
         sm_logit = sm(logit).transpose(1,3).transpose(2,3)
-        loss = criterion(sm_logit, y) / tensor(labels).sum().float()
+        mask = (tensor(qids)!=config.NULL_ID).float()
+        loss = (criterion(sm_logit, y) * mask).sum() / mask.sum()
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         print('------ITERATION {}, {}/{}, loss: {:>.4F}'.format(
             feeder.iteration, feeder.cursor, feeder.size, loss.tolist()))
-        if nbatch % 20 == 0:
+        if nbatch % 10 == 0:
             logit = model(x, None)
-            gids = logit.argmax(-1)
+            gids = logit.argmax(-1).tolist()
             question = feeder.ids_to_sent(gids[0])
-            print('generation test: {}'.format(question))
+            print('generation test: {:>.4F} {}'.format(logit[0].max(), question))
     return loss
 
 
@@ -58,7 +59,7 @@ def train(auto_stop, steps=50, threshold=0.2):
     dataset = Dataset()
     feeder = TrainFeeder(dataset)
     model = Model(len(dataset.ci2n)).cuda()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     feeder.prepare('train')
     if os.path.isfile(ckpt_path):
         ckpt = torch.load(ckpt_path)

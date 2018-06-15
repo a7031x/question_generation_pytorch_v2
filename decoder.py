@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 class SoftDotAttention(nn.Module):
     """Soft Dot Attention.
@@ -54,13 +55,13 @@ class LSTMAttentionDot(nn.Module):
         self.hidden_weights = nn.Linear(hidden_size, 4 * hidden_size)
         self.attention_layer = SoftDotAttention(hidden_size, input_size)
 
-    def forward(self, steps_or_target, hidden, ctx, ctx_mask):
+    def forward(self, steps_or_target, hidden, ctx, ctx_mask, keep_prob):
         """Propogate input through the network."""
         def recurrence(input, hidden):
             """Recurrence helper."""
             hx, cx = hidden  # n_b x hidden_dim
             gates = self.hidden_weights(hx)
-            if input is not None:
+            if input is not None and np.random.uniform(0, 1) < keep_prob:
                 gates += self.input_weights(input)
             ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
 
@@ -113,7 +114,6 @@ class Ctx2SeqAttention(nn.Module):
         bidirectional=True,
         nlayers=2,
         nlayers_trg=2,
-        dropout=0.,
     ):
         """Initialize model."""
         super(Ctx2SeqAttention, self).__init__()
@@ -123,7 +123,6 @@ class Ctx2SeqAttention(nn.Module):
         self.trg_hidden_dim = trg_hidden_dim
         self.bidirectional = bidirectional
         self.nlayers = nlayers
-        self.dropout = dropout
         self.num_directions = 2 if bidirectional else 1
         self.pad_token = pad_token
 
@@ -140,15 +139,17 @@ class Ctx2SeqAttention(nn.Module):
         self.decoder2vocab.bias.data.fill_(0)
 
 
-    def decode(self, ctx, state, ctx_mask, target=None):
+    def decode(self, ctx, state, ctx_mask, target=None, keep_prob=1):
         h_t, c_t = state.chunk(2, -1)
         decoder_init_state = self.encoder2decoder(h_t).tanh()
-
+        if target is None:
+            keep_prob = 1
         trg_h, _ = self.decoder(
             target if target is not None else self.num_steps,
             (decoder_init_state, c_t),
             ctx,
-            ctx_mask
+            ctx_mask,
+            keep_prob
         )
 
         trg_h_reshape = trg_h.contiguous().view(
@@ -165,10 +166,10 @@ class Ctx2SeqAttention(nn.Module):
         return decoder_logit[:,:decoder_logit.shape[1]-1,:]
 
 
-    def forward(self, ctx, state, ctx_mask, questions):
+    def forward(self, ctx, state, ctx_mask, questions, keep_prob):
         logits = []
         for y in torch.unbind(questions, 1):
-            decoder_logit = self.decode(ctx, state, ctx_mask, y)
+            decoder_logit = self.decode(ctx, state, ctx_mask, y, keep_prob)
             logits.append(decoder_logit)
         output = torch.cat(logits, 1).view(questions.shape[0], questions.shape[1], questions.shape[2]-1, -1)
         return output

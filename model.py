@@ -15,9 +15,8 @@ class Model(decoder.Ctx2SeqAttention):
             pad_token = config.NULL_ID,
             bidirectional = True,
             nlayers = config.num_question_encoder_layers,
-            nlayers_trg = config.num_decoder_rnn_layers,
-            dropout=0)
-        self.embedding = torch.nn.Embedding(self.vocab_size, config.embedding_dim)
+            nlayers_trg = config.num_decoder_rnn_layers)
+        self.embedding = torch.nn.Embedding(self.vocab_size, config.embedding_dim, padding_idx=config.SOS_ID)
         self.passage_conv0 = self.cnn_layers(config.num_passage_encoder_layers, config.encoder_kernel_size0, config.conv_vector_dim)
         self.passage_conv1 = self.cnn_layers(config.num_passage_encoder_layers, config.encoder_kernel_size1, config.conv_vector_dim)
         self.encoder_dim = config.encoder_hidden_dim * 2
@@ -34,7 +33,7 @@ class Model(decoder.Ctx2SeqAttention):
             sos = torch.LongTensor(batch_size, num_questions, 1).fill_(config.SOS_ID).cuda()
             y = torch.cat([sos, y], 2)
             question_embed = self.embedding(y)
-            decoder_logit = super(Model, self).forward(ctx, state_x, ctx_mask, question_embed)
+            decoder_logit = super(Model, self).forward(ctx, state_x, ctx_mask, question_embed, config.keep_prob)
         else:
             decoder_logit = super(Model, self).decode(ctx, state_x, ctx_mask)
         return decoder_logit

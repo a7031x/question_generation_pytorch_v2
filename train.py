@@ -47,7 +47,8 @@ def run_epoch(model, feeder, optimizer, batches):
         loss = (criterion(sm_logit, y) * mask).sum(-1)
         labels = tensor(labels).float()
         loss += (1-labels) * 100000
-        loss = loss.min(-1).sum() / labels.sum()
+        loss, _ = loss.min(-1)
+        loss = loss.sum() / labels.sum()
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()

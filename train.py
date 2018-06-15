@@ -36,6 +36,7 @@ def run_epoch(model, feeder, optimizer, batches):
     criterion = torch.nn.NLLLoss(size_average=False, reduce=False, weight=weight)
     sm = torch.nn.LogSoftmax(dim=-1)
     while nbatch < batches:
+        #feeder.cursor = 0
         pids, qids, labels,  _ = feeder.next()
         nbatch += 1
         x = tensor(pids)
@@ -44,7 +45,7 @@ def run_epoch(model, feeder, optimizer, batches):
         sm_logit = sm(logit).transpose(1,3).transpose(2,3)
         mask = (tensor(qids)!=config.NULL_ID).float()
         #mask[:,:,0] = 0.2
-        loss = (criterion(sm_logit, y) * mask).sum(-1)
+        loss = (criterion(sm_logit, y) * mask).mean(-1)
         labels = tensor(labels).float()
         loss += (1-labels) * 100000
         loss, _ = loss.min(-1)

@@ -9,7 +9,7 @@ class Dataset(object):
         self.c2i, self.i2c, self.ci2n = load_vocab(config.char_vocab_file, config.char_vocab_size)
         self.words = list(self.w2i.keys())
         self.chars = list(self.c2i.keys())
-        self.char_weights = [self.wi2n[id] for id in range(len(self.chars))]
+        self.char_weights = [self.ci2n[id] for id in range(len(self.chars))]
         self.norm_char_weights = self.char_weights / np.sum(self.char_weights)
         self.train_set = load_qa(config.train_file, config.answer_limit)
         self.dev_set = load_qa(config.dev_file, config.answer_limit)

@@ -31,7 +31,8 @@ def print_prediction(feeder, similarity, pids, qids, labels, number=None):
 
 def run_epoch(model, feeder, optimizer, batches):
     nbatch = 0
-    weight = len(feeder.dataset.char_weights) / (tensor(feeder.dataset.char_weights) + 20).float()
+    char_weights = tensor(feeder.dataset.norm_char_weights)
+    weight = 1 / (char_weights + char_weights.max() / 3).float()
     criterion = torch.nn.NLLLoss(size_average=False, reduce=False, weight=weight)
     sm = torch.nn.LogSoftmax(dim=-1)
     while nbatch < batches:
@@ -52,9 +53,11 @@ def run_epoch(model, feeder, optimizer, batches):
         if nbatch % 10 == 0:
             logit = model(x, None)
             gids = logit.argmax(-1).tolist()
-            question = feeder.ids_to_sent(gids[0])
-            print('truth:  {}'.format(feeder.ids_to_sent(qids[0][0])))
-            print('predict: {:>.4F} {}'.format(logit[0].max(), question))
+            for k in range(len(gids)):
+                question = feeder.ids_to_sent(gids[k])
+                print('truth:   {}'.format(feeder.ids_to_sent(qids[k][0])))
+                print('predict: {}'.format(question))
+                print('----------')
     return loss
 
 
@@ -62,7 +65,7 @@ def train(auto_stop, steps=50, threshold=0.2):
     dataset = Dataset()
     feeder = TrainFeeder(dataset)
     model = Model(len(dataset.ci2n)).cuda()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     feeder.prepare('train')
     if os.path.isfile(ckpt_path):
         ckpt = torch.load(ckpt_path)

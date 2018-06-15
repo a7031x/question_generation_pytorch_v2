@@ -52,7 +52,8 @@ def run_epoch(model, feeder, optimizer, batches):
             logit = model(x, None)
             gids = logit.argmax(-1).tolist()
             question = feeder.ids_to_sent(gids[0])
-            print('generation test: {:>.4F} {}'.format(logit[0].max(), question))
+            print('truth:  {}'.format(feeder.ids_to_sent(qids[0][0])))
+            print('predict: {:>.4F} {}'.format(logit[0].max(), question))
     return loss
 
 

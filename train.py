@@ -32,7 +32,7 @@ def print_prediction(feeder, similarity, pids, qids, labels, number=None):
 def run_epoch(model, feeder, optimizer, batches):
     nbatch = 0
     char_weights = tensor(feeder.dataset.norm_char_weights)
-    weight = 10 / (char_weights + char_weights.max() / 3).float()
+    weight = 10 / (char_weights + char_weights.max() / 100).float()
     criterion = torch.nn.NLLLoss(size_average=False, reduce=False, weight=weight)
     sm = torch.nn.LogSoftmax(dim=-1)
     while nbatch < batches:
